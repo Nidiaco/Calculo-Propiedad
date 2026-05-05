@@ -166,6 +166,10 @@
             <label class="field-label">Otros gastos ($)</label>
             <input id="cost-other" type="number" class="inp" placeholder="1000" value="1000" oninput="recalc()" />
           </div>
+          <div>
+            <label class="field-label">Depreciación chattels ($)</label>
+            <input id="cost-depreciation" type="number" class="inp" placeholder="0" value="0" oninput="recalc()" />
+          </div>
         </div>
       </div>
     </div>
@@ -572,11 +576,11 @@
       const capital = p.contribution;            // their actual $ invested
 
       // Rental: annual net after tax (their share)
-      const annualGross   = d.rentAnnual * pct;
-      const annualCosts   = d.totalCostAnnual * pct;
-      const annualNetPre  = annualGross - annualCosts;
-      const annualTax     = annualNetPre > 0 ? annualNetPre * (p.taxRate / 100) : 0;
-      const annualNetPost = annualNetPre - annualTax;
+      const annualGross    = d.rentAnnual * pct;
+      const annualCashNet  = d.netAnnual * pct;                           // cash after real expenses
+      const annualTaxable  = (d.netAnnual - d.depreciation) * pct;       // taxable (depreciation reduces this)
+      const annualTax      = annualTaxable > 0 ? annualTaxable * (p.taxRate / 100) : 0;
+      const annualNetPost  = annualCashNet - annualTax;
 
       const termRows = TD_TERMS.map(t => {
         const rentalNet  = annualNetPost * (t / 12);
@@ -774,13 +778,15 @@
     const insurance  = parseFloat(document.getElementById('cost-insurance').value) || 0;
     const maintenance= parseFloat(document.getElementById('cost-maintenance').value) || 0;
     const mgmtPct    = parseFloat(document.getElementById('cost-mgmt-pct').value) || 0;
-    const other      = parseFloat(document.getElementById('cost-other').value) || 0;
+    const other        = parseFloat(document.getElementById('cost-other').value) || 0;
+    const depreciation = parseFloat(document.getElementById('cost-depreciation').value) || 0;
     const mgmtAnnual = rentAnnual * (mgmtPct / 100);
-    const totalCostAnnual = rates + insurance + maintenance + mgmtAnnual + other;
-    const netAnnual = rentAnnual - totalCostAnnual;
+    const cashCostsAnnual = rates + insurance + maintenance + mgmtAnnual + other;
+    const totalCostAnnual = cashCostsAnnual + depreciation;
+    const netAnnual = rentAnnual - cashCostsAnnual;
     const propValue  = parseFloat(document.getElementById('prop-value').value) || 0;
     return { rentWeekly, rentAnnual, rates, insurance, maintenance, mgmtPct, mgmtAnnual, other,
-             totalCostAnnual, netAnnual, propValue };
+             depreciation, cashCostsAnnual, totalCostAnnual, netAnnual, propValue };
   }
 
   // ─── OWNERSHIP SUMMARY ───────────────────────────────────────────────────
@@ -817,7 +823,7 @@
       ['Mantenimiento', -d.maintenance, false],
       [`Administración (${d.mgmtPct}%)`, -d.mgmtAnnual, false],
       ['Otros gastos', -d.other, false],
-      ['── Ingreso neto anual', d.netAnnual, true],
+      ['── Ingreso neto anual (antes impuesto)', d.netAnnual, true],
     ];
     el.innerHTML = rows.map(([label, val, bold]) => `
       <div class="result-row ${bold ? 'border-t border-gray-200 mt-1 pt-2' : ''}">
@@ -826,7 +832,7 @@
       </div>`).join('');
 
     if (!gs) return;
-    const totalCost = d.totalCostAnnual;
+    const totalCost = d.cashCostsAnnual;
     const costItems = [
       ['Tasas municipales', d.rates],
       ['Seguro', d.insurance],
@@ -883,9 +889,10 @@
     el.innerHTML = parties.map((p, i) => {
       const pct = ownershipPct(i) / 100;
       const grossIncome = d.rentAnnual * pct * (f / 52);
-      const costShare   = d.totalCostAnnual * pct * (f / 52);
+      const costShare   = d.cashCostsAnnual * pct * (f / 52);
       const netIncome   = d.netAnnual * pct * (f / 52);
-      const taxShare    = netIncome > 0 ? netIncome * (p.taxRate / 100) : 0;
+      const taxableIncome = (d.netAnnual - d.depreciation) * pct * (f / 52);
+      const taxShare    = taxableIncome > 0 ? taxableIncome * (p.taxRate / 100) : 0;
       const netAfterTax = netIncome - taxShare;
       const isPos = netAfterTax >= 0;
       return `
@@ -982,7 +989,7 @@
       const rows = years.map(y => {
         const pv  = d.propValue  * Math.pow(1 + propGrowth, y);
         const ra  = d.rentAnnual * Math.pow(1 + rentGrowth, y);
-        const net = ra - d.totalCostAnnual; // simplified: costs static
+        const net = ra - d.cashCostsAnnual; // simplified: costs static
         const ny  = pv ? (net / pv * 100) : 0;
         return [y, fmt(pv), fmt(ra), fmt(net), ny.toFixed(2) + '%'];
       });
@@ -996,8 +1003,9 @@
     if (pr) {
       pr.innerHTML = parties.map((p, i) => {
         const pct       = ownershipPct(i) / 100;
-        const netAnnPty = d.netAnnual * pct;
-        const taxAmt    = netAnnPty > 0 ? netAnnPty * (p.taxRate / 100) : 0;
+        const netAnnPty    = d.netAnnual * pct;
+        const taxableAnnPty = (d.netAnnual - d.depreciation) * pct;
+        const taxAmt        = taxableAnnPty > 0 ? taxableAnnPty * (p.taxRate / 100) : 0;
         const netAfterTax = netAnnPty - taxAmt;
         const roi       = p.contribution ? (netAfterTax / p.contribution * 100) : 0;
         const payback   = netAfterTax > 0 ? (p.contribution / netAfterTax) : null;
