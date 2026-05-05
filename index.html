@@ -288,12 +288,12 @@
           <label class="field-label">Monto a depositar ($)</label>
           <div class="relative">
             <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-sm">$</span>
-            <input id="exp-amount" type="number" class="inp pl-6" placeholder="100000" value="100000" oninput="renderExplorer()" />
+            <input id="exp-amount" type="number" class="inp pl-6" placeholder="100000" value="100000" oninput="renderExplorer(); renderProjection()" />
           </div>
         </div>
         <div>
           <label class="field-label">Tu tasa RWT (%)</label>
-          <select id="exp-rwt" class="inp" onchange="renderExplorer()">
+          <select id="exp-rwt" class="inp" onchange="renderExplorer(); renderProjection()">
             <option value="10.5">10.5%</option>
             <option value="17.5">17.5%</option>
             <option value="30">30%</option>
@@ -303,6 +303,30 @@
         </div>
       </div>
       <div id="exp-table" class="overflow-x-auto"></div>
+    </div>
+
+    <!-- Compound projection -->
+    <div class="card">
+      <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">📈 Proyección a 10 años — interés compuesto</p>
+      <p class="text-xs text-gray-400 mb-4">El retorno neto de cada año se reinvierte. Cambia la tasa por año para simular variaciones del mercado.</p>
+
+      <div class="mb-4">
+        <p class="field-label mb-2">Tasa anual por año (%)</p>
+        <div class="grid grid-cols-5 gap-2">
+          <div><label class="field-label">Año 1</label><input id="yr-1" type="number" class="inp text-center" value="4" step="0.1" oninput="renderProjection()" /></div>
+          <div><label class="field-label">Año 2</label><input id="yr-2" type="number" class="inp text-center" value="4" step="0.1" oninput="renderProjection()" /></div>
+          <div><label class="field-label">Año 3</label><input id="yr-3" type="number" class="inp text-center" value="4" step="0.1" oninput="renderProjection()" /></div>
+          <div><label class="field-label">Año 4</label><input id="yr-4" type="number" class="inp text-center" value="4" step="0.1" oninput="renderProjection()" /></div>
+          <div><label class="field-label">Año 5</label><input id="yr-5" type="number" class="inp text-center" value="4" step="0.1" oninput="renderProjection()" /></div>
+          <div><label class="field-label">Año 6</label><input id="yr-6" type="number" class="inp text-center" value="4" step="0.1" oninput="renderProjection()" /></div>
+          <div><label class="field-label">Año 7</label><input id="yr-7" type="number" class="inp text-center" value="4" step="0.1" oninput="renderProjection()" /></div>
+          <div><label class="field-label">Año 8</label><input id="yr-8" type="number" class="inp text-center" value="4" step="0.1" oninput="renderProjection()" /></div>
+          <div><label class="field-label">Año 9</label><input id="yr-9" type="number" class="inp text-center" value="4" step="0.1" oninput="renderProjection()" /></div>
+          <div><label class="field-label">Año 10</label><input id="yr-10" type="number" class="inp text-center" value="4" step="0.1" oninput="renderProjection()" /></div>
+        </div>
+      </div>
+
+      <div id="exp-projection" class="overflow-x-auto"></div>
     </div>
 
   </div>
@@ -650,7 +674,75 @@
   }
 
 
-  // ─── UPDATE BARS ONLY (no re-render of inputs) ──────────────────────────
+  // ─── COMPOUND PROJECTION ────────────────────────────────────────────────────
+  function renderProjection() {
+    const el = document.getElementById('exp-projection');
+    if (!el) return;
+    const amount = parseFloat(document.getElementById('exp-amount')?.value) || 0;
+    const rwt    = parseFloat(document.getElementById('exp-rwt')?.value) || 33;
+    if (amount === 0) { el.innerHTML = '<p class="text-xs text-gray-400 text-center py-3">Ingresa un monto para ver la proyección.</p>'; return; }
+
+    let capital = amount;
+    let totalGross = 0, totalTax = 0, totalNet = 0;
+    const rows = [];
+
+    for (let y = 1; y <= 10; y++) {
+      const rate  = parseFloat(document.getElementById('yr-' + y)?.value) || 0;
+      const gross = capital * (rate / 100);
+      const tax   = gross * (rwt / 100);
+      const net   = gross - tax;
+      const end   = capital + net;
+      totalGross += gross;
+      totalTax   += tax;
+      totalNet   += net;
+      rows.push(`<tr class="border-b border-gray-50 hover:bg-gray-50">
+        <td class="py-2 px-3 text-sm font-semibold text-gray-600">Año ${y}</td>
+        <td class="py-2 px-3 text-right text-sm text-gray-700">${fmtTD(capital)}</td>
+        <td class="py-2 px-3 text-right text-sm text-gray-500">${rate.toFixed(1)}%</td>
+        <td class="py-2 px-3 text-right text-sm text-gray-700">+ ${fmtTD(gross)}</td>
+        <td class="py-2 px-3 text-right text-sm text-red-400">− ${fmtTD(tax)}</td>
+        <td class="py-2 px-3 text-right text-sm text-blue-600 font-semibold">+ ${fmtTD(net)}</td>
+        <td class="py-2 px-3 text-right text-sm font-extrabold text-gray-800">${fmtTD(end)}</td>
+      </tr>`);
+      capital = end;
+    }
+
+    const gain = capital - amount;
+    const gainPct = ((gain / amount) * 100).toFixed(1);
+
+    el.innerHTML = `
+      <table class="w-full border-collapse text-sm">
+        <thead>
+          <tr class="bg-gray-50">
+            <th class="py-2 px-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">Año</th>
+            <th class="py-2 px-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">Capital inicial</th>
+            <th class="py-2 px-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">Tasa</th>
+            <th class="py-2 px-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">Interés bruto</th>
+            <th class="py-2 px-3 text-right text-xs font-bold text-red-400 uppercase tracking-wide border-b border-gray-200">RWT ${rwt}%</th>
+            <th class="py-2 px-3 text-right text-xs font-bold text-blue-500 uppercase tracking-wide border-b border-gray-200">Interés neto</th>
+            <th class="py-2 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide border-b border-gray-200">Capital acumulado</th>
+          </tr>
+        </thead>
+        <tbody>${rows.join('')}</tbody>
+        <tfoot>
+          <tr class="bg-gray-50 border-t-2 border-gray-300">
+            <td class="py-3 px-3 font-extrabold text-gray-800" colspan="3">Total 10 años</td>
+            <td class="py-3 px-3 text-right font-bold text-gray-700">${fmtTD(totalGross)}</td>
+            <td class="py-3 px-3 text-right font-bold text-red-400">− ${fmtTD(totalTax)}</td>
+            <td class="py-3 px-3 text-right font-bold text-blue-600">${fmtTD(totalNet)}</td>
+            <td class="py-3 px-3 text-right font-extrabold text-green-600 text-lg">${fmtTD(capital)}</td>
+          </tr>
+          <tr class="bg-green-50">
+            <td colspan="7" class="py-2 px-3 text-center text-sm">
+              <span class="font-bold text-green-700">Ganancia neta total: ${fmtTD(gain)}</span>
+              <span class="text-gray-500 ml-2">(+${gainPct}% sobre el capital inicial)</span>
+            </td>
+          </tr>
+        </tfoot>
+      </table>`;
+  }
+
+  // ─── UPDATE BARS ONLY (no re-render of inputs) ──────────────────────────────────
   function updatePartyBars() {
     parties.forEach((p, i) => {
       const bar = document.getElementById('pct-bar-' + i);
@@ -672,6 +764,7 @@
     renderAnalysis();
     renderTermDeposit();
     renderExplorer();
+    renderProjection();
   }
 
   function getInputs() {
