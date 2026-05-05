@@ -76,6 +76,7 @@
     <button class="tab-btn" onclick="switchTab('analisis')">📈 Análisis</button>
     <button class="tab-btn" onclick="switchTab('deposito')">� Property vs Plazo</button>
     <button class="tab-btn" onclick="switchTab('explorar')">� Depósito a Plazo</button>
+    <button class="tab-btn" onclick="switchTab('acciones')">📈 Acciones</button>
     <button class="tab-btn" onclick="switchTab('acuerdo')">📝 Acuerdo</button>
   </div>
 
@@ -336,7 +337,54 @@
   </div>
 
   <!-- ═══════════════════════════════════════════
-       TAB 7 — ACUERDO
+       TAB 7 — ACCIONES (exploratorio)
+  ═══════════════════════════════════════════ -->
+  <div id="tab-acciones" class="section">
+
+    <div class="card">
+      <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">📈 Calculadora de acciones</p>
+      <p class="text-xs text-gray-400 mb-4">Explora retornos de acciones/ETFs con dividendos e incremento de capital. Nota: sin impuesto a ganancias de capital en NZ.</p>
+      <div class="grid grid-cols-2 gap-3 mb-5">
+        <div>
+          <label class="field-label">Monto a invertir ($)</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-sm">$</span>
+            <input id="shares-amount" type="number" class="inp pl-6" placeholder="100000" value="100000" oninput="renderShares()" />
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Tu tasa RWT (%)</label>
+          <select id="shares-rwt" class="inp" onchange="renderShares()">
+            <option value="10.5">10.5%</option>
+            <option value="17.5">17.5%</option>
+            <option value="30">30%</option>
+            <option value="33" selected>33%</option>
+            <option value="39">39%</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Rendimiento de dividendos anual (%)</label>
+          <input id="shares-dividend" type="number" class="inp text-center" placeholder="2.5" value="2.5" step="0.1" oninput="renderShares()" />
+        </div>
+        <div>
+          <label class="field-label">Crecimiento anual de capital (%)</label>
+          <input id="shares-growth" type="number" class="inp text-center" placeholder="7" value="7" step="0.1" oninput="renderShares()" />
+        </div>
+      </div>
+      <div id="shares-table" class="overflow-x-auto"></div>
+    </div>
+
+    <!-- Shares projection -->
+    <div class="card">
+      <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">📊 Proyección a 10 años</p>
+      <p class="text-xs text-gray-400 mb-4">Dividendos reinvertidos. Capital crece anualmente. Impuesto solo en dividendos (no en ganancias de capital).</p>
+      <div id="shares-projection" class="overflow-x-auto"></div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       TAB 8 — ACUERDO
   ═══════════════════════════════════════════ -->
   <div id="tab-acuerdo" class="section">
 
@@ -678,6 +726,111 @@
   }
 
 
+  // ─── SHARES/ETF CALCULATOR ──────────────────────────────────────────────────
+  function renderShares() {
+    const amountEl = document.getElementById('shares-amount');
+    const rwtEl = document.getElementById('shares-rwt');
+    const divEl = document.getElementById('shares-dividend');
+    const growthEl = document.getElementById('shares-growth');
+    const tableEl = document.getElementById('shares-table');
+    const projEl = document.getElementById('shares-projection');
+    if (!amountEl) return;
+
+    const amount = parseFloat(amountEl.value) || 0;
+    const rwt = parseFloat(rwtEl.value) || 33;
+    const divYield = parseFloat(divEl.value) || 2.5;
+    const capGrowth = parseFloat(growthEl.value) || 7;
+
+    if (amount === 0) {
+      if (tableEl) tableEl.innerHTML = '<p class="text-xs text-gray-400 text-center py-3">Ingresa un monto para ver proyecciones.</p>';
+      if (projEl) projEl.innerHTML = '';
+      return;
+    }
+
+    // Annual comparison table
+    const years = [1, 3, 5, 10];
+    const rows = years.map(y => {
+      let capital = amount;
+      let totalDivTax = 0;
+      for (let i = 0; i < y; i++) {
+        const divGross = capital * (divYield / 100);
+        const divTax = divGross * (rwt / 100);
+        const divNet = divGross - divTax;
+        totalDivTax += divTax;
+        capital = capital * (1 + capGrowth / 100) + divNet;
+      }
+      const gain = capital - amount;
+      const gainPct = ((gain / amount) * 100).toFixed(1);
+      return `<tr class="border-b border-gray-50 hover:bg-gray-50">
+        <td class="py-2 px-3 text-sm font-semibold text-gray-600">${y} año${y > 1 ? 's' : ''}</td>
+        <td class="py-2 px-3 text-right text-sm text-gray-700">${fmtTD(capital)}</td>
+        <td class="py-2 px-3 text-right text-sm text-blue-600 font-semibold">+ ${fmtTD(gain)}</td>
+        <td class="py-2 px-3 text-right text-sm text-red-400">- ${fmtTD(totalDivTax)}</td>
+        <td class="py-2 px-3 text-right text-sm font-bold text-green-600">+${gainPct}%</td>
+      </tr>`;
+    }).join('');
+
+    if (tableEl) {
+      tableEl.innerHTML = `<table class="w-full border-collapse text-sm">
+        <thead><tr class="bg-gray-50">
+          <th class="py-2 px-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">Período</th>
+          <th class="py-2 px-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">Capital final</th>
+          <th class="py-2 px-3 text-right text-xs font-bold text-blue-500 uppercase tracking-wide border-b border-gray-200">Ganancia</th>
+          <th class="py-2 px-3 text-right text-xs font-bold text-red-400 uppercase tracking-wide border-b border-gray-200">Impuesto dividendos</th>
+          <th class="py-2 px-3 text-right text-xs font-bold text-green-600 uppercase tracking-wide border-b border-gray-200">Retorno %</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    }
+
+    // 10-year projection
+    if (projEl) {
+      let capital = amount;
+      let totalDivTax = 0;
+      const projRows = [];
+      for (let y = 1; y <= 10; y++) {
+        const divGross = capital * (divYield / 100);
+        const divTax = divGross * (rwt / 100);
+        const divNet = divGross - divTax;
+        const capGain = capital * (capGrowth / 100);
+        totalDivTax += divTax;
+        const prevCapital = capital;
+        capital = capital * (1 + capGrowth / 100) + divNet;
+        projRows.push(`<tr class="border-b border-gray-50 hover:bg-gray-50">
+          <td class="py-2 px-3 text-sm font-semibold text-gray-600">Año ${y}</td>
+          <td class="py-2 px-3 text-right text-sm text-gray-700">${fmtTD(prevCapital)}</td>
+          <td class="py-2 px-3 text-right text-sm text-gray-500">${divYield.toFixed(1)}% / ${capGrowth.toFixed(1)}%</td>
+          <td class="py-2 px-3 text-right text-sm text-gray-700">+ ${fmtTD(divGross)}</td>
+          <td class="py-2 px-3 text-right text-sm text-red-400">- ${fmtTD(divTax)}</td>
+          <td class="py-2 px-3 text-right text-sm text-blue-600">+ ${fmtTD(capGain)}</td>
+          <td class="py-2 px-3 text-right text-sm font-extrabold text-gray-800">${fmtTD(capital)}</td>
+        </tr>`);
+      }
+      const totalGain = capital - amount;
+      const totalGainPct = ((totalGain / amount) * 100).toFixed(1);
+      projEl.innerHTML = `<table class="w-full border-collapse text-sm">
+        <thead><tr class="bg-gray-50">
+          <th class="py-2 px-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">Año</th>
+          <th class="py-2 px-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">Capital inicial</th>
+          <th class="py-2 px-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">Tasas</th>
+          <th class="py-2 px-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wide border-b border-gray-200">Dividendo bruto</th>
+          <th class="py-2 px-3 text-right text-xs font-bold text-red-400 uppercase tracking-wide border-b border-gray-200">Impuesto ${rwt}%</th>
+          <th class="py-2 px-3 text-right text-xs font-bold text-blue-500 uppercase tracking-wide border-b border-gray-200">Crecimiento capital</th>
+          <th class="py-2 px-3 text-right text-xs font-bold text-gray-800 uppercase tracking-wide border-b border-gray-200">Capital final</th>
+        </tr></thead>
+        <tbody>${projRows.join('')}</tbody>
+        <tfoot>
+          <tr class="bg-green-50">
+            <td colspan="7" class="py-2 px-3 text-center text-sm">
+              <span class="font-bold text-green-700">Capital final: ${fmtTD(capital)}</span>
+              <span class="text-gray-500 ml-2">Ganancia neta: ${fmtTD(totalGain)} (+${totalGainPct}%)</span>
+            </td>
+          </tr>
+        </tfoot>
+      </table>`;
+    }
+  }
+
   // ─── COMPOUND PROJECTION ────────────────────────────────────────────────────
   function renderProjection() {
     const el = document.getElementById('exp-projection');
@@ -769,6 +922,7 @@
     renderTermDeposit();
     renderExplorer();
     renderProjection();
+    renderShares();
   }
 
   function getInputs() {
